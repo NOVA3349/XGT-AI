@@ -1,0 +1,401 @@
+
+name: Build NOVA Launcher APK
+on:
+  push:
+  workflow_dispatch:
+jobs:
+  build:
+    runs-on: ubuntu-latest
+    steps:
+      - uses: actions/setup-java@v4
+        with:
+          distribution: temurin
+          java-version: '17'
+      - uses: gradle/actions/setup-gradle@v3
+        with:
+          gradle-version: '8.2'
+      - name: Create project files
+        run: |
+          mkdir -p $(dirname 'settings.gradle')
+          cat > 'settings.gradle' <<'NOVA_EOF'
+          pluginManagement {
+              repositories { google(); mavenCentral(); gradlePluginPortal() }
+          }
+          dependencyResolutionManagement {
+              repositoriesMode.set(RepositoriesMode.FAIL_ON_PROJECT_REPOS)
+              repositories { google(); mavenCentral() }
+          }
+          rootProject.name = "NovaLauncher"
+          include ':app'
+          NOVA_EOF
+          mkdir -p $(dirname 'build.gradle')
+          cat > 'build.gradle' <<'NOVA_EOF'
+          plugins {
+              id 'com.android.application' version '8.1.4' apply false
+              id 'org.jetbrains.kotlin.android' version '1.9.22' apply false
+          }
+          NOVA_EOF
+          mkdir -p $(dirname 'gradle.properties')
+          cat > 'gradle.properties' <<'NOVA_EOF'
+          org.gradle.jvmargs=-Xmx2048m -Dfile.encoding=UTF-8
+          android.useAndroidX=true
+          kotlin.code.style=official
+          android.nonTransitiveRClass=true
+          NOVA_EOF
+          mkdir -p $(dirname 'app/build.gradle')
+          cat > 'app/build.gradle' <<'NOVA_EOF'
+          plugins {
+              id 'com.android.application'
+              id 'org.jetbrains.kotlin.android'
+          }
+
+          android {
+              namespace 'com.novaphone.launcher'
+              compileSdk 34
+
+              defaultConfig {
+                  applicationId "com.novaphone.launcher"
+                  minSdk 26
+                  targetSdk 27
+                  versionCode 1
+                  versionName "0.1"
+              }
+
+              buildTypes {
+                  release { minifyEnabled false }
+              }
+              compileOptions {
+                  sourceCompatibility JavaVersion.VERSION_1_8
+                  targetCompatibility JavaVersion.VERSION_1_8
+              }
+              kotlinOptions { jvmTarget = '1.8' }
+              lint { abortOnError false; checkReleaseBuilds false }
+          }
+          NOVA_EOF
+          mkdir -p $(dirname 'app/src/main/AndroidManifest.xml')
+          cat > 'app/src/main/AndroidManifest.xml' <<'NOVA_EOF'
+          <?xml version="1.0" encoding="utf-8"?>
+          <manifest xmlns:android="http://schemas.android.com/apk/res/android">
+
+              <application
+                  android:allowBackup="false"
+                  android:icon="@drawable/ic_launcher"
+                  android:label="NOVA Launcher"
+                  android:theme="@style/Theme.Nova">
+
+                  <activity
+                      android:name=".SplashActivity"
+                      android:exported="true"
+                      android:launchMode="singleTask"
+                      android:stateNotNeeded="true"
+                      android:excludeFromRecents="true"
+                      android:screenOrientation="portrait">
+                      <intent-filter>
+                          <action android:name="android.intent.action.MAIN" />
+                          <category android:name="android.intent.category.HOME" />
+                          <category android:name="android.intent.category.DEFAULT" />
+                          <category android:name="android.intent.category.LAUNCHER" />
+                      </intent-filter>
+                  </activity>
+
+                  <activity
+                      android:name=".MainActivity"
+                      android:exported="false"
+                      android:launchMode="singleTask"
+                      android:stateNotNeeded="true"
+                      android:excludeFromRecents="true"
+                      android:screenOrientation="portrait"
+                      android:windowSoftInputMode="adjustPan" />
+              </application>
+          </manifest>
+          NOVA_EOF
+          mkdir -p $(dirname 'app/src/main/res/values/styles.xml')
+          cat > 'app/src/main/res/values/styles.xml' <<'NOVA_EOF'
+          <?xml version="1.0" encoding="utf-8"?>
+          <resources>
+              <style name="Theme.Nova" parent="android:Theme.Material.NoActionBar">
+                  <item name="android:windowBackground">@android:color/black</item>
+                  <item name="android:statusBarColor">@android:color/transparent</item>
+                  <item name="android:navigationBarColor">@android:color/transparent</item>
+                  <item name="android:windowDrawsSystemBarBackgrounds">true</item>
+              </style>
+          </resources>
+          NOVA_EOF
+          mkdir -p $(dirname 'app/src/main/res/drawable/ic_launcher.xml')
+          cat > 'app/src/main/res/drawable/ic_launcher.xml' <<'NOVA_EOF'
+          <?xml version="1.0" encoding="utf-8"?>
+          <vector xmlns:android="http://schemas.android.com/apk/res/android"
+              android:width="108dp" android:height="108dp"
+              android:viewportWidth="108" android:viewportHeight="108">
+              <path android:fillColor="#0B1020" android:pathData="M0,0h108v108h-108z" />
+              <path android:fillColor="#5B6BFF"
+                  android:pathData="M34,74V34h8l24,26V34h8v40h-8L42,48v26z" />
+          </vector>
+          NOVA_EOF
+          mkdir -p $(dirname 'app/src/main/res/drawable/splash_bg.xml')
+          cat > 'app/src/main/res/drawable/splash_bg.xml' <<'NOVA_EOF'
+          <?xml version="1.0" encoding="utf-8"?>
+          <shape xmlns:android="http://schemas.android.com/apk/res/android">
+              <gradient
+                  android:startColor="#141B3A"
+                  android:endColor="#05070F"
+                  android:angle="270" />
+          </shape>
+          NOVA_EOF
+          mkdir -p $(dirname 'app/src/main/java/com/novaphone/launcher/MainActivity.kt')
+          cat > 'app/src/main/java/com/novaphone/launcher/MainActivity.kt' <<'NOVA_EOF'
+          package com.novaphone.launcher
+
+          import android.app.Activity
+          import android.content.BroadcastReceiver
+          import android.content.Context
+          import android.content.Intent
+          import android.content.IntentFilter
+          import android.content.pm.PackageManager
+          import android.content.pm.ResolveInfo
+          import android.graphics.Color
+          import android.graphics.Typeface
+          import android.graphics.drawable.GradientDrawable
+          import android.net.Uri
+          import android.os.Bundle
+          import android.os.Handler
+          import android.os.Looper
+          import android.provider.Settings
+          import android.text.TextUtils
+          import android.view.Gravity
+          import android.view.View
+          import android.view.ViewGroup
+          import android.widget.BaseAdapter
+          import android.widget.GridView
+          import android.widget.ImageView
+          import android.widget.LinearLayout
+          import android.widget.TextView
+          import java.text.SimpleDateFormat
+          import java.util.Date
+          import java.util.Locale
+
+          class MainActivity : Activity() {
+
+              private lateinit var clock: TextView
+              private lateinit var dateText: TextView
+              private lateinit var grid: GridView
+              private val apps = ArrayList<ResolveInfo>()
+              private val adapter = AppAdapter()
+              private val handler = Handler(Looper.getMainLooper())
+
+              private val tick = object : Runnable {
+                  override fun run() {
+                      val now = Date()
+                      clock.text = SimpleDateFormat("HH:mm", Locale.getDefault()).format(now)
+                      dateText.text = SimpleDateFormat("EEEE d MMMM", Locale.getDefault()).format(now)
+                      handler.postDelayed(this, 1000)
+                  }
+              }
+
+              private val pkgReceiver = object : BroadcastReceiver() {
+                  override fun onReceive(c: Context?, i: Intent?) { loadApps() }
+              }
+
+              private fun dp(v: Int) = (v * resources.displayMetrics.density).toInt()
+
+              override fun onCreate(savedInstanceState: Bundle?) {
+                  super.onCreate(savedInstanceState)
+
+                  val bg = GradientDrawable(
+                      GradientDrawable.Orientation.TOP_BOTTOM,
+                      intArrayOf(Color.parseColor("#141B3A"), Color.parseColor("#05070F"))
+                  )
+                  val root = LinearLayout(this).apply {
+                      orientation = LinearLayout.VERTICAL
+                      background = bg
+                      setPadding(dp(16), dp(56), dp(16), dp(16))
+                  }
+
+                  clock = TextView(this).apply {
+                      textSize = 56f
+                      setTextColor(Color.WHITE)
+                      typeface = Typeface.create("sans-serif-light", Typeface.NORMAL)
+                      gravity = Gravity.CENTER
+                  }
+                  dateText = TextView(this).apply {
+                      textSize = 15f
+                      setTextColor(Color.parseColor("#8FA3D6"))
+                      gravity = Gravity.CENTER
+                  }
+                  val brand = TextView(this).apply {
+                      text = "NOVA Launcher 0.1"
+                      textSize = 11f
+                      setTextColor(Color.parseColor("#5B6BFF"))
+                      gravity = Gravity.CENTER
+                      setPadding(0, dp(6), 0, dp(24))
+                  }
+
+                  grid = GridView(this).apply {
+                      numColumns = 4
+                      verticalSpacing = dp(20)
+                      selector = android.graphics.drawable.ColorDrawable(Color.TRANSPARENT)
+                      isVerticalScrollBarEnabled = false
+                      adapter = this@MainActivity.adapter
+                      setOnItemClickListener { _, _, pos, _ -> launch(apps[pos]) }
+                      setOnItemLongClickListener { _, _, pos, _ -> openAppInfo(apps[pos]); true }
+                  }
+
+                  root.addView(clock, LinearLayout.LayoutParams(-1, -2))
+                  root.addView(dateText, LinearLayout.LayoutParams(-1, -2))
+                  root.addView(brand, LinearLayout.LayoutParams(-1, -2))
+                  root.addView(grid, LinearLayout.LayoutParams(-1, 0, 1f))
+                  setContentView(root)
+
+                  loadApps()
+              }
+
+              override fun onStart() {
+                  super.onStart()
+                  val f = IntentFilter().apply {
+                      addAction(Intent.ACTION_PACKAGE_ADDED)
+                      addAction(Intent.ACTION_PACKAGE_REMOVED)
+                      addAction(Intent.ACTION_PACKAGE_CHANGED)
+                      addDataScheme("package")
+                  }
+                  registerReceiver(pkgReceiver, f)
+              }
+
+              override fun onStop() {
+                  unregisterReceiver(pkgReceiver)
+                  super.onStop()
+              }
+
+              override fun onResume() { super.onResume(); handler.post(tick) }
+              override fun onPause() { super.onPause(); handler.removeCallbacks(tick) }
+
+              override fun onNewIntent(intent: Intent?) {
+                  super.onNewIntent(intent)
+                  grid.smoothScrollToPosition(0)
+              }
+
+              override fun onBackPressed() {}
+
+              private fun loadApps() {
+                  val pm = packageManager
+                  val i = Intent(Intent.ACTION_MAIN).addCategory(Intent.CATEGORY_LAUNCHER)
+                  val list = pm.queryIntentActivities(i, 0)
+                      .filter { it.activityInfo.packageName != packageName }
+                      .sortedBy { it.loadLabel(pm).toString().lowercase() }
+                  apps.clear(); apps.addAll(list)
+                  adapter.notifyDataSetChanged()
+              }
+
+              private fun launch(ri: ResolveInfo) {
+                  val intent = packageManager.getLaunchIntentForPackage(ri.activityInfo.packageName)
+                  if (intent != null) {
+                      intent.addFlags(Intent.FLAG_ACTIVITY_NEW_TASK)
+                      startActivity(intent)
+                  }
+              }
+
+              private fun openAppInfo(ri: ResolveInfo) {
+                  val i = Intent(Settings.ACTION_APPLICATION_DETAILS_SETTINGS,
+                      Uri.parse("package:" + ri.activityInfo.packageName))
+                  i.addFlags(Intent.FLAG_ACTIVITY_NEW_TASK)
+                  startActivity(i)
+              }
+
+              private inner class AppAdapter : BaseAdapter() {
+                  override fun getCount() = apps.size
+                  override fun getItem(p: Int) = apps[p]
+                  override fun getItemId(p: Int) = p.toLong()
+                  override fun getView(p: Int, v: View?, parent: ViewGroup): View {
+                      val pm: PackageManager = packageManager
+                      val cell = LinearLayout(this@MainActivity).apply {
+                          orientation = LinearLayout.VERTICAL
+                          gravity = Gravity.CENTER_HORIZONTAL
+                      }
+                      cell.addView(ImageView(this@MainActivity).apply {
+                          setImageDrawable(apps[p].loadIcon(pm))
+                          layoutParams = LinearLayout.LayoutParams(dp(48), dp(48))
+                      })
+                      cell.addView(TextView(this@MainActivity).apply {
+                          text = apps[p].loadLabel(pm)
+                          textSize = 11f
+                          setTextColor(Color.WHITE)
+                          maxLines = 1
+                          gravity = Gravity.CENTER
+                          ellipsize = TextUtils.TruncateAt.END
+                          setPadding(0, dp(4), 0, 0)
+                      })
+                      return cell
+                  }
+              }
+          }
+          NOVA_EOF
+          mkdir -p $(dirname 'app/src/main/java/com/novaphone/launcher/SplashActivity.kt')
+          cat > 'app/src/main/java/com/novaphone/launcher/SplashActivity.kt' <<'NOVA_EOF'
+          package com.novaphone.launcher
+
+          import android.animation.ObjectAnimator
+          import android.app.Activity
+          import android.content.Intent
+          import android.graphics.Color
+          import android.graphics.Typeface
+          import android.os.Bundle
+          import android.os.Handler
+          import android.os.Looper
+          import android.view.Gravity
+          import android.widget.LinearLayout
+          import android.widget.TextView
+
+          class SplashActivity : Activity() {
+
+              override fun onCreate(savedInstanceState: Bundle?) {
+                  super.onCreate(savedInstanceState)
+
+                  val root = LinearLayout(this).apply {
+                      orientation = LinearLayout.VERTICAL
+                      gravity = Gravity.CENTER
+                      setBackgroundResource(R.drawable.splash_bg)
+                  }
+                  val title = TextView(this).apply {
+                      text = "NOVA"
+                      textSize = 48f
+                      setTextColor(Color.WHITE)
+                      typeface = Typeface.create("sans-serif-light", Typeface.NORMAL)
+                      gravity = Gravity.CENTER
+                      letterSpacing = 0.25f
+                      alpha = 0f
+                  }
+                  val subtitle = TextView(this).apply {
+                      text = "LAUNCHER"
+                      textSize = 13f
+                      setTextColor(Color.parseColor("#5B6BFF"))
+                      gravity = Gravity.CENTER
+                      letterSpacing = 0.35f
+                      alpha = 0f
+                      setPadding(0, 16, 0, 0)
+                  }
+                  root.addView(title)
+                  root.addView(subtitle)
+                  setContentView(root)
+
+                  ObjectAnimator.ofFloat(title, "alpha", 0f, 1f).apply { duration = 600 }.start()
+                  ObjectAnimator.ofFloat(subtitle, "alpha", 0f, 1f).apply {
+                      duration = 600
+                      startDelay = 300
+                  }.start()
+
+                  Handler(Looper.getMainLooper()).postDelayed({
+                      startActivity(Intent(this, MainActivity::class.java))
+                      overridePendingTransition(android.R.anim.fade_in, android.R.anim.fade_out)
+                      finish()
+                  }, 1600)
+              }
+
+              override fun onBackPressed() {}
+          }
+          NOVA_EOF
+      - name: Build APK
+        run: gradle assembleDebug --no-daemon
+      - uses: actions/upload-artifact@v4
+        with:
+          name: NovaLauncher-APK
+          path: app/build/outputs/apk/debug/app-debug.apk
+
